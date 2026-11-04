@@ -1,0 +1,106 @@
+#!/bin/busybox sh
+# NetClone netboot initramfs init.
+# Mounts the kernel filesystems, brings up the network over DHCP, then hands
+# control to netclone-client which receives the multicast image.
+
+export PATH=/bin:/sbin:/usr/bin:/usr/sbin
+export HOME=/
+
+mount -t proc proc /proc
+mount -t sysfs sysfs /sys
+mount -t devtmpfs devtmpfs /dev 2>/dev/null
+mount -t tmpfs -o mode=0755 tmpfs /run
+mkdir -p /dev/pts /tmp /var/log /var/run /newroot
+mount -t devpts devpts /dev/pts 2>/dev/null
+
+cmdline() {
+    for w in $(cat /proc/cmdline); do
+        case "$w" in
+            "$1="*) echo "${w#*=}"; return ;;
+        esac
+    done
+}
+
+SERVER="$(cmdline netclone.server)"
+TOKEN="$(cmdline netclone.token)"
+POLICY="$(cmdline netclone.policy)"
+[ -n "$POLICY" ] || POLICY="first"
+
+echo ""
+echo "=================================================="
+echo "  NetClone istemcisi"
+echo "  Sunucu : $SERVER"
+echo "=================================================="
+echo ""
+
+if [ -z "$SERVER" ] || [ -z "$TOKEN" ]; then
+    echo "HATA: netclone.server / netclone.token cekirdek parametreleri yok."
+    echo "Bu makine NetClone sunucusundan PXE ile boot edilmeli."
+    sleep 60
+    reboot -f
+fi
+
+# ---------------------------------------------------------------- drivers
+for m in sd_mod ahci nvme usb-storage virtio_blk virtio_net e1000 e1000e igb igbvf \
+         r8169 ixgbe ixgbevf tg3 bnx2 bnx2x atlantic alx r8101 vmxnet3 hv_netvsc \
+         xhci_hcd ehci_pci ohci_pci uhci_hcd; do
+    modprobe -q "$m" 2>/dev/null
+done
+
+# Load whatever the PCI/USB buses actually contain, using modalias aliases.
+for f in /sys/bus/pci/devices/*/modalias /sys/bus/usb/devices/*/modalias; do
+    [ -r "$f" ] || continue
+    modprobe -q "$(cat "$f")" 2>/dev/null
+done
+
+# Give the kernel a moment to create the device nodes.
+sleep 1
+
+echo "Diskler:"
+for d in /sys/class/block/*; do
+    n="$(basename "$d")"
+    case "$n" in loop*|ram*|zram*|sr*) continue ;; esac
+    [ -e "/sys/class/block/$n/partition" ] && continue
+    sz=$(( $(cat "/sys/class/block/$n/size" 2>/dev/null || echo 0) * 512 ))
+    echo "  /dev/$n  $(( sz / 1024 / 1024 / 1024 )) GiB"
+done
+echo ""
+
+# ---------------------------------------------------------------- network
+for n in /sys/class/net/*; do
+    ifc="$(basename "$n")"
+    [ "$ifc" = "lo" ] && continue
+    ip link set "$ifc" up 2>/dev/null
+done
+
+GOT=""
+for n in /sys/class/net/*; do
+    ifc="$(basename "$n")"
+    [ "$ifc" = "lo" ] && continue
+    echo "DHCP deneniyor: $ifc"
+    if udhcpc -i "$ifc" -n -q -t 6 -T 3 -s /etc/udhcpc.script >/dev/null 2>&1; then
+        GOT="$ifc"
+        break
+    fi
+done
+
+if [ -z "$GOT" ]; then
+    echo "HATA: DHCP ile IP alinamadi."
+    echo "Kabloyu ve sunucunun DHCP ayarini kontrol edin. 60 sn sonra yeniden denenecek."
+    sleep 60
+    reboot -f
+fi
+
+echo "Ag hazir: $GOT"
+ip -4 addr show "$GOT" 2>/dev/null | sed 's/^/  /'
+echo ""
+
+# ---------------------------------------------------------------- deploy
+netclone-client -server "$SERVER" -token "$TOKEN" -policy "$POLICY"
+RC=$?
+
+echo ""
+echo "netclone-client cikti: rc=$RC"
+echo "15 saniye icinde yeniden baslatiliyor..."
+sleep 15
+reboot -f

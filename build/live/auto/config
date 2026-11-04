@@ -1,0 +1,20 @@
+#!/bin/sh
+# live-build configuration for the NetClone USB system.
+set -e
+
+lb config noauto \
+	--distribution bookworm \
+	--architecture amd64 \
+	--archive-areas "main contrib non-free non-free-firmware" \
+	--binary-images iso-hybrid \
+	--bootloaders "syslinux,grub-efi" \
+	--bootappend-live "boot=live components quiet loglevel=3 username=netclone hostname=netclone locales=tr_TR.UTF-8 keyboard-layouts=tr,us timezone=Europe/Istanbul" \
+	--debian-installer none \
+	--memtest none \
+	--iso-application "NetClone" \
+	--iso-publisher "NetClone imaging appliance" \
+	--iso-volume "NETCLONE" \
+	--linux-flavours amd64 \
+	--linux-packages "linux-image" \
+	--checksums sha256 \
+	"$@"

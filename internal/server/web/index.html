@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NetClone</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <div class="logo">◈</div>
+    <div>
+      <h1>NetClone</h1>
+      <p>Disk imajı al · multicast ile çoklu kurulum</p>
+    </div>
+  </div>
+  <nav class="tabs">
+    <button data-tab="capture" class="active"><span>1</span> İmaj Al</button>
+    <button data-tab="deploy"><span>2</span> Dağıt</button>
+    <button data-tab="monitor"><span>3</span> İzle</button>
+  </nav>
+  <div class="host">
+    <div class="host-name" id="hostName">…</div>
+    <div class="pill" id="hostIp">bağlanıyor…</div>
+  </div>
+</header>
+
+<main>
+  <!-- ================= IMAGE CAPTURE ================= -->
+  <section id="tab-capture" class="tab active">
+    <div class="headline">
+      <h2>Bu bilgisayarın disk imajını al</h2>
+      <p>Kaynak diski ve imajın yazılacağı konumu seçin. İmaj sadece dolu blokları taşır, boş alan aktarılmaz.</p>
+    </div>
+
+    <div class="grid two">
+      <div class="card">
+        <div class="card-head">
+          <h3>Kaynak disk</h3>
+          <button class="ghost small" id="refreshDisks">Yenile</button>
+        </div>
+        <div id="diskList" class="list"><div class="empty">Diskler okunuyor…</div></div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <h3>Hedef konum</h3>
+          <button class="ghost small" id="refreshMounts">Yenile</button>
+        </div>
+        <div id="mountList" class="list compact"></div>
+        <div class="subhead">Bağlı olmayan diskler</div>
+        <div id="partList" class="list compact"></div>
+
+        <label class="field">
+          <span>Klasör yolu</span>
+          <input id="destDir" spellcheck="false" placeholder="/mnt/harici-disk">
+        </label>
+        <div class="meter"><span>Boş alan</span><b id="freeSpace">—</b></div>
+
+        <label class="field">
+          <span>İmaj adı</span>
+          <input id="imageName" spellcheck="false" placeholder="lab-pc-01">
+        </label>
+
+        <label class="field">
+          <span>Sıkıştırma</span>
+          <select id="level">
+            <option value="1" selected>Hızlı (önerilen)</option>
+            <option value="3">Dengeli</option>
+            <option value="6">Küçük dosya (yavaş)</option>
+          </select>
+        </label>
+
+        <button class="primary wide" id="startCapture">İmajı Al</button>
+      </div>
+    </div>
+
+    <div class="card progress-card" id="captureProgress" hidden>
+      <div class="card-head">
+        <h3 id="capTitle">İmaj alınıyor</h3>
+        <span class="pill" id="capPhase">çalışıyor</span>
+      </div>
+      <div class="bar big"><div id="capBar"></div></div>
+      <div class="stats">
+        <div><span>Okunan</span><b id="capRead">—</b></div>
+        <div><span>Yazılan</span><b id="capOut">—</b></div>
+        <div><span>Hız</span><b id="capSpeed">—</b></div>
+        <div><span>Süre</span><b id="capTime">—</b></div>
+      </div>
+      <div class="row end">
+        <button class="danger small" id="cancelCapture">İptal</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= DEPLOY ================= -->
+  <section id="tab-deploy" class="tab">
+    <div class="headline">
+      <h2>İmajı ağdaki bilgisayarlara dağıt</h2>
+      <p>İstemcileri PXE ile ağdan boot edin. Belirlediğiniz sayıda bilgisayar bağlandığında imaj multicast ile tek seferde gönderilir.</p>
+    </div>
+
+    <div class="grid two">
+      <div class="card">
+        <div class="card-head">
+          <h3>İmaj seçimi</h3>
+          <button class="ghost small" id="scanImages">Tara</button>
+        </div>
+        <div class="row">
+          <input id="imageDir" spellcheck="false" placeholder="/mnt/harici-disk/netclone">
+        </div>
+        <div id="imageList" class="list"><div class="empty">Klasör seçip “Tara”ya basın.</div></div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h3>Dağıtım ayarları</h3></div>
+
+        <label class="field">
+          <span>Beklenen bilgisayar sayısı</span>
+          <div class="stepper">
+            <button class="ghost small" id="expectedMinus">−</button>
+            <input id="expected" type="number" min="1" max="254" value="1">
+            <button class="ghost small" id="expectedPlus">+</button>
+          </div>
+        </label>
+
+        <label class="field">
+          <span>Ağ arayüzü</span>
+          <select id="iface"></select>
+        </label>
+
+        <label class="field">
+          <span>DHCP</span>
+          <select id="dhcpMode">
+            <option value="server">Bu bilgisayar DHCP sunucusu olsun (izole ağ)</option>
+            <option value="proxy">Mevcut DHCP sunucusuna ekle (proxyDHCP)</option>
+          </select>
+        </label>
+
+        <label class="field">
+          <span>İstemcide hedef disk</span>
+          <select id="policy">
+            <option value="first">İlk dahili disk</option>
+            <option value="smallest-fit">İmaja sığan en küçük disk</option>
+            <option value="largest">En büyük disk</option>
+          </select>
+        </label>
+
+        <div class="warn">
+          <b>Dikkat:</b> dağıtım başladığında bağlanan bilgisayarların seçilen diski tamamen silinir.
+          İstemcileri bu bilgisayara bağlı ayrı bir switch üzerinden boot edin.
+        </div>
+
+        <button class="primary wide" id="startSession">Dağıtımı Başlat</button>
+      </div>
+    </div>
+
+    <div class="card" id="pxeInfo">
+      <div class="card-head"><h3>PXE bağlantı bilgileri</h3></div>
+      <div class="kv">
+        <div><span>Sunucu IP</span><b id="pxeIp">—</b></div>
+        <div><span>Arayüz</span><b id="pxeIface">—</b></div>
+        <div><span>DHCP aralığı</span><b id="pxePool">otomatik</b></div>
+        <div><span>Multicast port</span><b>9100</b></div>
+      </div>
+      <p class="hint">
+        İstemcilerde ağdan boot (PXE) açık olmalı. Sunucu DHCP modunda çalışırken ağda başka bir DHCP
+        sunucusu olmamalı; varsa proxyDHCP modunu seçin.
+      </p>
+    </div>
+  </section>
+
+  <!-- ================= MONITOR ================= -->
+  <section id="tab-monitor" class="tab">
+    <div class="headline">
+      <h2>Dağıtım izleme</h2>
+      <p>Bağlanan bilgisayarlar ve aktarım durumu.</p>
+    </div>
+
+    <div class="card" id="monitorCard">
+      <div class="monitor-head">
+        <div>
+          <div class="big" id="monCount">0 / 0</div>
+          <div class="hint">bağlı / beklenen</div>
+        </div>
+        <div class="monitor-meta">
+          <span class="pill" id="monPhase">oturum yok</span>
+          <div class="hint" id="monImage">—</div>
+          <div class="hint" id="monElapsed"></div>
+        </div>
+        <div class="actions">
+          <button class="ghost small" id="forceStart">Şimdi Başlat</button>
+          <button class="danger small" id="abortSession">İptal</button>
+          <button class="ghost small" id="closeSession">Oturumu Kapat</button>
+        </div>
+      </div>
+      <div class="bar big"><div id="monBar"></div></div>
+      <div id="clientGrid" class="clients">
+        <div class="empty">Henüz bağlı bilgisayar yok. İstemcileri PXE ile boot edin.</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h3>Olay günlüğü</h3></div>
+      <pre id="logView" class="log"></pre>
+    </div>
+  </section>
+</main>
+
+<div id="toast" class="toast"></div>
+<script src="app.js"></script>
+</body>
+</html>

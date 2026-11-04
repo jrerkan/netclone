@@ -1,0 +1,21 @@
+#!/bin/sh
+# Openbox session for the NetClone appliance: a full screen browser showing
+# the local control panel.
+xset -dpms
+xset s off
+xset s noblank
+xsetroot -solid "#0b1220" 2>/dev/null || true
+unclutter -idle 0 -root >/dev/null 2>&1 &
+
+# Give netclone.service a moment to bind the port.
+sleep 5
+
+exec chromium \
+    --kiosk \
+    --app=http://127.0.0.1:8080 \
+    --start-maximized \
+    --noerrdialogs \
+    --disable-infobars \
+    --disable-session-crashed-bubble \
+    --disable-features=Translate,MediaRouter \
+    --check-for-update-interval=31536000

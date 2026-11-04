@@ -1,0 +1,1 @@
+CHROMIUM_FLAGS="$CHROMIUM_FLAGS --no-sandbox --disable-dev-shm-usage --disable-gpu-sandbox --no-first-run --password-store=basic"

@@ -1,0 +1,12 @@
+#!/bin/busybox sh
+# Minimal DHCP client script for the NetClone netboot initramfs.
+case "$1" in
+    deconfig)
+        ifconfig "$interface" 0.0.0.0 2>/dev/null
+        ip link set "$interface" up 2>/dev/null
+        ;;
+    bound|renew)
+        ifconfig "$interface" "$ip" netmask "$mask" up 2>/dev/null
+        [ -n "$router" ] && route add default gw "$router" dev "$interface" 2>/dev/null
+        ;;
+esac

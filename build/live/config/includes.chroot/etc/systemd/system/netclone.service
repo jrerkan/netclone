@@ -1,0 +1,21 @@
+[Unit]
+Description=NetClone imaging server
+Documentation=file:///usr/share/doc/netclone/README.md
+After=network.target
+Wants=network.target
+
+[Service]
+Type=simple
+Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+ExecStartPre=/bin/mkdir -p /var/lib/netclone/images /run/netclone
+# Builds the PXE kernel/bootloaders/client initramfs if the ISO build could not.
+# Failures are non fatal: the panel still starts, but PXE needs the assets.
+ExecStartPre=-/usr/local/bin/netclone-prepare-assets
+ExecStart=/usr/local/bin/netclone-server --listen :8080 --port 8080 --state /run/netclone --assets /usr/lib/netclone/netboot --work /var/lib/netclone/images
+Restart=always
+RestartSec=2
+# The server needs raw disk access, DHCP (67) and TFTP (69).
+User=root
+
+[Install]
+WantedBy=multi-user.target

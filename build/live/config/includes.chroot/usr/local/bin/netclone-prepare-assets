@@ -1,0 +1,71 @@
+#!/bin/sh
+# Ensures the netboot assets (kernel, boot loaders, client initramfs) exist in
+# /usr/lib/netclone/netboot. Safe to run repeatedly: only missing or stale
+# files are (re)built. Called from the build hook and at every boot before
+# netclone-server starts, so the ISO build works regardless of whether
+# live-build copies config/includes.chroot before or after the hooks.
+set -eu
+
+NB=/usr/lib/netclone/netboot
+SHARE=/usr/local/share/netclone
+mkdir -p "$NB" /var/lib/netclone/images
+
+KVER="$(ls /lib/modules 2>/dev/null | sort -V | tail -n1)"
+if [ -z "$KVER" ]; then
+    echo "netclone-prepare-assets: no kernel in /lib/modules" >&2
+    exit 1
+fi
+
+# --- kernel ---------------------------------------------------------------
+if [ ! -s "$NB/vmlinuz" ] && [ -f "/boot/vmlinuz-$KVER" ]; then
+    cp -f "/boot/vmlinuz-$KVER" "$NB/vmlinuz"
+fi
+
+# --- UEFI PXE boot loader (GRUB netboot image) ---------------------------
+if [ ! -s "$NB/grubnetx64.efi" ]; then
+    for p in \
+        /usr/lib/grub/x86_64-efi/monolithic/grubnetx64.efi \
+        /usr/lib/grub/x86_64-efi/monolithic/grubnetx64.efi.signed \
+        /usr/lib/shim/grubnetx64.efi.signed; do
+        if [ -f "$p" ]; then
+            cp -f "$p" "$NB/grubnetx64.efi"
+            break
+        fi
+    done
+fi
+
+# --- legacy BIOS PXE boot loader -----------------------------------------
+if [ ! -s "$NB/pxelinux.0" ]; then
+    for p in /usr/lib/PXELINUX/pxelinux.0 \
+             /usr/lib/syslinux/pxelinux.0 \
+             /usr/lib/syslinux/modules/bios/pxelinux.0; do
+        if [ -f "$p" ]; then cp -f "$p" "$NB/pxelinux.0"; break; fi
+    done
+fi
+for f in ldlinux.c32 libcom32.c32 libutil.c32 menu.c32; do
+    if [ -s "$NB/$f" ]; then continue; fi
+    for d in /usr/lib/syslinux/modules/bios /usr/lib/PXELINUX /usr/lib/syslinux; do
+        if [ -f "$d/$f" ]; then cp -f "$d/$f" "$NB/$f"; break; fi
+    done
+done
+
+# --- client initramfs -----------------------------------------------------
+if [ -x "$SHARE/make-netboot-initramfs.sh" ]; then
+    if [ ! -s "$NB/initrd.img" ] \
+       || [ "$NB/initrd.img" -ot "$SHARE/init" ] \
+       || [ "$NB/initrd.img" -ot "$SHARE/make-netboot-initramfs.sh" ]; then
+        "$SHARE/make-netboot-initramfs.sh" "$NB/initrd.img"
+    fi
+else
+    echo "netclone-prepare-assets: $SHARE/make-netboot-initramfs.sh is missing" >&2
+fi
+
+# --- sanity ---------------------------------------------------------------
+missing=0
+for f in vmlinuz initrd.img grubnetx64.efi pxelinux.0 ldlinux.c32; do
+    if [ ! -s "$NB/$f" ]; then
+        echo "netclone-prepare-assets: missing $NB/$f" >&2
+        missing=1
+    fi
+done
+exit "$missing"

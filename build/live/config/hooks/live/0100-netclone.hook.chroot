@@ -1,0 +1,30 @@
+#!/bin/sh
+# live-build chroot hook: stage the netboot assets and enable services.
+#
+# NOTE: live-build does not guarantee whether config/includes.chroot is copied
+# into the chroot before or after this hook, so all work here is best effort.
+# /usr/local/bin/netclone-prepare-assets is shipped through includes.chroot and
+# is also executed at boot by netclone.service, which makes the build
+# order-independent.
+set -eu
+export DEBIAN_FRONTEND=noninteractive
+
+mkdir -p /var/lib/netclone/images /usr/share/doc/netclone
+
+if [ -x /usr/local/bin/netclone-prepare-assets ]; then
+    chmod 0755 /usr/local/bin/netclone-prepare-assets || true
+    /usr/local/bin/netclone-prepare-assets || \
+        echo "netclone hook: asset preparation failed, will retry at boot" >&2
+else
+    echo "netclone hook: includes.chroot not available yet; netboot assets will be built at first boot" >&2
+fi
+
+# --- services -------------------------------------------------------------
+systemctl enable netclone.service >/dev/null 2>&1 || \
+    ln -sf /etc/systemd/system/netclone.service /etc/systemd/system/multi-user.target.wants/netclone.service
+
+systemctl enable lightdm.service >/dev/null 2>&1 || true
+
+# Keep the appliance lean.
+apt-get clean
+rm -rf /var/lib/apt/lists/*

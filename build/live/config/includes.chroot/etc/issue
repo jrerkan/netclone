@@ -1,0 +1,13 @@
+╔══════════════════════════════════════════════════════════════╗
+║  N e t C l o n e   —   disk imajı ve çoklu dağıtım           ║
+╚══════════════════════════════════════════════════════════════╝
+
+  Yönetim arayüzü :  http://<bu-bilgisayarin-ip-adresi>:8080
+  Yerel arayüz   :  http://127.0.0.1:8080
+
+  Grafik arayüz açılmazsa konsoldan şunları kullanabilirsiniz:
+
+    ip -4 addr            ağ adresini gösterir
+    systemctl status netclone
+
+  Kapatmak için:  poweroff
