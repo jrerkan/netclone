@@ -1,0 +1,106 @@
+name: Build NetClone ISO
+
+# ISO derlemesi uzun sürdüğü için her push'ta değil, elle veya v* etiketiyle
+# çalışır. Actions sekmesi -> "Build NetClone ISO" -> "Run workflow".
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: netclone-iso-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-iso:
+    name: Debian live ISO (amd64)
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # live-build chroot + squashfs + ISO aynı anda birkaç GB ister.
+      # Runner'daki kullanılmayan SDK'ları silip yer açıyoruz.
+      - name: Free disk space
+        run: |
+          set -euxo pipefail
+          df -h /
+          sudo rm -rf \
+            /usr/share/dotnet \
+            /usr/local/lib/android \
+            /opt/ghc \
+            /opt/hostedtoolcache/CodeQL || true
+          docker system prune -af || true
+          df -h /
+
+      - name: Build builder image
+        run: docker build --tag netclone-builder ./build
+
+      - name: Build ISO
+        run: |
+          set -euo pipefail
+          mkdir -p out
+          docker run --rm --privileged --shm-size=2g \
+            --env DEBIAN_FRONTEND=noninteractive \
+            --env HOME=/root \
+            --volume "${GITHUB_WORKSPACE}:/work" \
+            --workdir /work \
+            netclone-builder \
+            bash build/build-iso.sh
+
+      - name: Verify ISO and checksum
+        run: |
+          set -euo pipefail
+          ls -lh out
+
+          iso="$(find out -maxdepth 1 -type f -name 'netclone-*.iso' | head -n1)"
+          test -n "$iso"
+          test -s "$iso"
+          test -f "${iso}.sha256"
+          (cd out && sha256sum -c "$(basename "${iso}").sha256")
+
+          {
+            echo "### NetClone ISO hazır"
+            echo ""
+            echo '```'
+            cat "${iso}.sha256"
+            echo '```'
+            echo ""
+            echo "Boyut: $(du -h "$iso" | cut -f1)"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # Artifact yüklenirken ISO'nun bir kopyası daha geçici diske yazılır.
+      # live-build ara dosyalarını ve builder imajını silerek yer açıyoruz.
+      - name: Free space before upload
+        run: |
+          set -euxo pipefail
+          sudo rm -rf \
+            build/live/chroot \
+            build/live/binary \
+            build/live/.build \
+            build/live/config/binary \
+            build/live/config/chroot \
+            build/live/config/bootstrap \
+            build/live/config/common \
+            build/live/config/source || true
+          docker image rm --force netclone-builder || true
+          docker system prune --force || true
+          df -h /
+
+      - name: Upload ISO artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: netclone-iso-${{ github.run_number }}-${{ github.run_attempt }}
+          path: |
+            out/netclone-*.iso
+            out/netclone-*.iso.sha256
+          if-no-files-found: error
+          # ISO zaten sıkıştırılmış; tekrar sıkıştırmak sadece zaman kaybettirir.
+          compression-level: 0
+          retention-days: 14
