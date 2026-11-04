@@ -30,10 +30,12 @@ SHARE="$ROOT/build/live/config/includes.chroot/usr/local/share/netclone"
 DOCS="$ROOT/build/live/config/includes.chroot/usr/share/doc/netclone"
 mkdir -p "$BIN" "$SHARE" "$DOCS"
 
-CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags "-s -w" \
-    -o "$BIN/netclone-server" ./cmd/netclone-server
-CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags "-s -w" \
-    -o "$BIN/netclone-client" ./cmd/netclone-client
+# -buildvcs=false: CI'da depo root tarafindan sahiplenilmis olabilir; Git
+# "dubious ownership" verdiginde Go'nun VCS damgalamasi derlemeyi durdurmasin.
+CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -buildvcs=false \
+    -ldflags "-s -w" -o "$BIN/netclone-server" ./cmd/netclone-server
+CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -buildvcs=false \
+    -ldflags "-s -w" -o "$BIN/netclone-client" ./cmd/netclone-client
 chmod 0755 "$BIN/netclone-server" "$BIN/netclone-client"
 
 echo "==> staging netboot helpers"
